@@ -195,12 +195,19 @@ impl<T> Pipeline<T> where T: Dispatch {
                 // through the read-cycle again.
                 self.run = false;
             }
-            Some(Frame::Error { .. }) => {
-                // At this point, the transport is toast, there
-                // isn't much else that we can do. Killing the task
-                // will cause all in-flight requests to abort, but
-                // they can't be written to the transport anyway...
-                return Err(io::Error::new(io::ErrorKind::BrokenPipe, "An error occurred."));
+            Some(Frame::Error { error }) => {
+                // At this point, we got an error frame and we need to let
+                // it flow through by continuing dispatch it as an error,
+                // rather than killing the task.
+
+                // There is no streaming body. Set `out_body` to `None` so that
+                // the previous body stream is dropped.
+                self.out_body = None;
+
+                if let Err(_) = self.dispatch.get_mut().inner.dispatch(Err(error)) {
+                    // TODO: Should dispatch be infalliable
+                    unimplemented!();
+                }
             }
         }
 
